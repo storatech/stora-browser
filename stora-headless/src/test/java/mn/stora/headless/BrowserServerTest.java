@@ -81,6 +81,18 @@ class BrowserServerTest {
   }
 
   @Test
+  void servesTesterPageWithoutToken() throws Exception {
+    for (String path : new String[] {"/", "/tester"}) {
+      HttpResponse<String> r = HTTP.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.port() + path))
+          .GET().build(), HttpResponse.BodyHandlers.ofString());
+      assertEquals(200, r.statusCode());
+      assertTrue(r.headers().firstValue("Content-Type").orElse("").startsWith("text/html"));
+      assertTrue(r.body().contains("<title>stora-headless tester</title>"));
+      assertTrue(r.body().contains("Object.assign({ url: url, return: ['html'] }"), "tester script must not be filtered");
+    }
+  }
+
+  @Test
   void rejectsMissingOrWrongToken() throws Exception {
     assertEquals(401, call("POST", "/render", Json.obj("url", site.url("/spa")), null).status);
     assertEquals(401, call("POST", "/render", Json.obj("url", site.url("/spa")), "wrong").status);

@@ -12,6 +12,7 @@ It lives in the `stora-headless/` folder of `stora-browser`, next to the old jBr
 ## Contents
 
 - [Quick start](#quick-start)
+- [Tester page](#tester-page): a browser-like page to try URLs, scripts and clicks
 - [The session flow](#the-session-flow): open → run JavaScript → run more → close
 - [Clicking and navigating](#clicking-and-navigating)
 - [One-shot render](#one-shot-render)
@@ -43,6 +44,20 @@ curl -s localhost:8090/health
 
 The server binds to `127.0.0.1` by default. Put it on another interface (`--host 0.0.0.0`) only behind a firewall and with a token: anyone who can reach it can make it fetch any URL.
 
+## Tester page
+
+Open **http://127.0.0.1:8090/tester** (or just `/`) in a desktop browser. It works like a small browser on top of the API:
+
+- **Address bar** with back, forward and reload. Go opens a headless session and loads the URL; the next URLs load in the same session, with its cookies.
+- **Page** tab shows the HTML the headless browser produced, rendered with the site's images and CSS. Clicking a link in it loads that link through the headless session. The preview never runs the page's scripts (sandboxed iframe); what you see is the DOM after the headless browser ran them.
+- **HTML** and **Text** tabs show the source and the visible text.
+- **Run JavaScript in the session**: run a script and see its JSON result. Tick "waits for navigation" for scripts that click or change `location`; "refresh view" shows changes the script made.
+- **Click / wait**: click a CSS selector (with navigation waiting) or wait for one to appear.
+- **Options**: server token (kept in the browser's localStorage), proxy, mode (full, lean, HTML only, no JavaScript), emulated browser, wait settings, Accept-Language and user agent.
+- The status line shows the HTTP status, title, final URL, time, number of requests (and how many were blocked), data size and session id.
+
+The page itself needs no token; the API calls it makes do, so it asks for the token only if the server has one.
+
 ## The session flow
 
 A **session** is one isolated browser: its own cookies, proxy, user agent and headers. The normal flow is:
@@ -69,7 +84,8 @@ curl -s localhost:8090/sessions/$ID/evaluate -H "$H" -d '{
 # {"ok":true,"result":{"title":"Example Domain","links":1},"url":"https://example.com/"}
 
 # 3. run more JavaScript in the same page
-curl -s localhost:8090/sessions/$ID/evaluate -H "$H" -d '{"script": "document.querySelector(\"h1\").textContent"}'
+curl -s localhost:8090/sessions/$ID/evaluate -H "$H" -d '{"script": "document.querySelector(\"p\").textContent"}'
+# {"ok":true,"result":"This domain is for use in documentation examples without needing permission. …","url":"https://example.com/"}
 
 # 4. close
 curl -s -X DELETE localhost:8090/sessions/$ID -H "$H"
@@ -117,8 +133,8 @@ For a single page, `POST /render` opens a session, loads the URL, waits, runs th
 ```bash
 curl -s localhost:8090/render -H "$H" -d '{
   "url": "https://example.com/",
-  "waitForSelector": "h1",
-  "script": "document.querySelector(\"h1\").textContent",
+  "waitForSelector": "p",
+  "script": "document.querySelector(\"p\").textContent",
   "return": ["html", "text"]
 }'
 ```
@@ -223,9 +239,9 @@ Most of the time goes into downloading and running the site's own scripts. When 
 
 | Mode | Settings | Amazon search page (see [benchmark.md](benchmark.md)) |
 |---|---|---|
-| Full | defaults (`jsWaitMs: 1000`) | about 110 requests, 2.5 MB, 15–20 s |
-| Lean | `blockTypes: ["image","font","media","stylesheet"]`, `blockUrls` for ads and trackers | fewer requests, scripts still run |
-| HTML-only | `jsWaitMs: 0`, `blockTypes: ["script","stylesheet","image","font","media"]` | 15 requests, 0.36 MB, about 3 s |
+| Full | defaults (`jsWaitMs: 1000`) | 2.1 MB, median 15.8 s (32 s through a proxy) |
+| Lean | `blockTypes: ["image","font","media","stylesheet"]`, `blockUrls` for ads and trackers | 1.5 MB, median 7.3 s (14 s through a proxy) |
+| HTML-only | `jsWaitMs: 0`, `blockTypes: ["script","stylesheet","image","font","media"]` | 14 requests, 0.32 MB, median 3.1 s (3.6 s through a proxy) |
 
 In HTML-only mode the page's external scripts are skipped, but your `script`/`then` still runs on the document. Use full or lean mode when the content is rendered by the page's JavaScript, and check which one a site needs with `"javascript": false` first.
 
@@ -295,7 +311,8 @@ All bodies are JSON. Unless `--token` / `STORA_HEADLESS_TOKEN` is unset, every r
 
 | Method and path | What it does |
 |---|---|
-| `GET /health` | Version, engine, open sessions, free slots |
+| `GET /` or `GET /tester` | The [tester page](#tester-page) (no token needed) |
+| `GET /health` | Version, engine, open sessions, free slots, heap (no token needed) |
 | `POST /render` | One-shot: open, load `url`, wait, run script, return, close |
 | `POST /sessions` | Open a session; with `url`, also load it (same fields as `/render`) |
 | `GET /sessions` | List open sessions (id, age, idle time) |
@@ -442,7 +459,7 @@ Sites that ship modern bundles with `class` or `async` code (not compiled down f
 - **Modern single-page apps:** apps whose bundles use `class` or `async`/`await` do not run in this engine. Example: `www.stora.mn` serves an empty Next.js shell (`<div id="__next"></div>`) and its `_app` bundle has 132 `class` and 325 `async`/`await` uses, so nothing renders. Server-rendered HTML (and the site's JSON APIs, which you can call with `fetch` from a script) still work.
 - **Frames and pop-ups:** a session always reads its main page. Iframes (for example ad frames) and pop-ups load in their own windows and never replace it; `window.open` pop-ups are blocked.
 - **TLS and HTTP/2:** requests use Java's TLS and HTTP/1.1 stack, which some sites fingerprint differently from desktop browsers.
-- **Memory:** measured about 40 MB of heap per session on a heavy page (three open Coupang home-page sessions: 129 MB heap in total). `/health` reports `heapUsedMb`. Size `--max-sessions` and `-Xmx` together, e.g. `-Xmx1g` for 8 sessions.
+- **Memory:** depends on the mode. HTML-only sessions are light (8 parallel Amazon sessions stayed under 350 MB of heap); sessions that run a big site's scripts need about 100–150 MB each (4 parallel lean Amazon sessions: 511 MB). `/health` reports `heapUsedMb`. Size `--max-sessions` and `-Xmx` together; see [benchmark.md](benchmark.md).
 
 ## Deploying
 
@@ -467,7 +484,7 @@ Keep `HOST` at `127.0.0.1` when the scrapers run on the same host. Otherwise bin
 ## Development
 
 ```bash
-mvn test          # 32 tests: local test site and test proxy, no internet needed
+mvn test          # 33 tests: local test site and test proxy, no internet needed
 mvn package       # + target/stora-headless-0.1.0-SNAPSHOT-all.jar
 ```
 
@@ -477,6 +494,7 @@ mvn package       # + target/stora-headless-0.1.0-SNAPSHOT-all.jar
 | `SessionOptions.java`, `ProxySpec.java`, `RequestFilter.java` | Options, proxy parsing, URL and type blocking with stats |
 | `server/BrowserServer.java`, `server/Requests.java` | HTTP routes and JSON mapping (JDK `HttpServer`) |
 | `Main.java` | `serve` and `render` commands |
+| `src/main/resources/tester.html` | The tester page (plain HTML, CSS and JavaScript, no build step) |
 | `src/test/java/...` | `TestSite` (local pages: SPA, shop, product, headers echo), `TestProxy` (proxy with login), session and server tests |
 | `examples/` | Coupang example in shell and TypeScript |
-| `bench/amazon_benchmark.py` | Amazon product and search benchmark (results in [benchmark.md](benchmark.md)) |
+| `bench/amazon_benchmark.py`, `bench/results-2026-10-16.json` | Amazon product and search benchmark and its raw results, summarized in [benchmark.md](benchmark.md) |

@@ -33,6 +33,7 @@ import mn.stora.headless.Version;
  * JSON-over-HTTP API around {@link BrowserSession}. Uses only the JDK's built-in HTTP server.
  *
  * <pre>
+ * GET    /  or /tester                 browser-like tester page (static, no token)
  * GET    /health
  * POST   /render                       one-shot: open, load, wait, run script, return, close
  * POST   /sessions                     open a session (optionally load a URL)
@@ -116,7 +117,7 @@ public final class BrowserServer implements AutoCloseable {
     String path = ex.getRequestURI().getPath();
     int status;
     try {
-      if (!path.equals("/health") && !authorized(ex)) {
+      if (!isPublic(method, path) && !authorized(ex)) {
         status = send(ex, 401, error("Missing or invalid token", "UNAUTHORIZED"));
       } else {
         status = route(ex, method, path);
@@ -146,6 +147,9 @@ public final class BrowserServer implements AutoCloseable {
           "sessions", sessions.size(), "maxSessions", config.maxSessions,
           "freeSlots", slots.availablePermits(),
           "heapUsedMb", (rt.totalMemory() - rt.freeMemory()) / mb, "heapMaxMb", rt.maxMemory() / mb));
+    }
+    if (method.equals("GET") && (path.equals("/") || path.equals("/tester") || path.equals("/tester/"))) {
+      return sendTester(ex);
     }
     if (parts.length == 2 && parts[1].equals("render") && method.equals("POST")) {
       return send(ex, 200, render(readJson(ex)));
@@ -376,6 +380,31 @@ public final class BrowserServer implements AutoCloseable {
       Thread.currentThread().interrupt();
       throw new BrowserException(BrowserException.Kind.BROWSER, "Interrupted", e);
     }
+  }
+
+  /** The health check and the static tester page need no token; the API calls they make do. */
+  private static boolean isPublic(String method, String path) {
+    return method.equals("GET")
+        && (path.equals("/health") || path.equals("/") || path.equals("/tester") || path.equals("/tester/"));
+  }
+
+  private static int sendTester(HttpExchange ex) throws IOException {
+    byte[] bytes;
+    try (InputStream in = BrowserServer.class.getResourceAsStream("/tester.html")) {
+      if (in == null) {
+        return send(ex, 404, error("Tester page not packaged", "NOT_FOUND"));
+      }
+      bytes = in.readAllBytes();
+    }
+    ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+    ex.getResponseHeaders().set("Cache-Control", "no-store");
+    ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+    ex.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+    ex.sendResponseHeaders(200, bytes.length);
+    try (OutputStream out = ex.getResponseBody()) {
+      out.write(bytes);
+    }
+    return 200;
   }
 
   private boolean authorized(HttpExchange ex) {
