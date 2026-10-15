@@ -17,8 +17,16 @@ public final class ServerConfig {
   /** How long a request waits for a free session slot before getting 503. */
   public int queueTimeoutMs = 30_000;
   public int maxBodyBytes = 5 * 1024 * 1024;
+  /**
+   * Proxy for sessions that do not send their own {@code proxy}. Sending {@code "proxy": ""}
+   * opts a session out. Never logged or reported.
+   */
+  public String defaultProxy;
 
-  /** Applies environment variables: HOST, PORT, STORA_HEADLESS_TOKEN, MAX_SESSIONS, SESSION_TTL_SECONDS. */
+  /**
+   * Applies environment variables: HOST, PORT, STORA_HEADLESS_TOKEN, STORA_HEADLESS_PROXY,
+   * MAX_SESSIONS, SESSION_TTL_SECONDS.
+   */
   public static ServerConfig fromEnv(Map<String, String> env) {
     ServerConfig c = new ServerConfig();
     if (notBlank(env.get("HOST"))) {
@@ -29,6 +37,9 @@ public final class ServerConfig {
     }
     if (notBlank(env.get("STORA_HEADLESS_TOKEN"))) {
       c.token = env.get("STORA_HEADLESS_TOKEN");
+    }
+    if (notBlank(env.get("STORA_HEADLESS_PROXY"))) {
+      c.defaultProxy = env.get("STORA_HEADLESS_PROXY");
     }
     if (notBlank(env.get("MAX_SESSIONS"))) {
       c.maxSessions = Integer.parseInt(env.get("MAX_SESSIONS"));

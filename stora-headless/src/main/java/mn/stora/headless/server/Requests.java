@@ -28,14 +28,18 @@ final class Requests {
   private Requests() {
   }
 
-  /** Session-level options shared by {@code /render} and {@code POST /sessions}. */
-  static SessionOptions sessionOptions(JsonObject body) {
+  /**
+   * Session-level options shared by {@code /render} and {@code POST /sessions}. Without a
+   * {@code proxy} field the server's default proxy (if any) is used; {@code "proxy": ""} means none.
+   */
+  static SessionOptions sessionOptions(JsonObject body, String defaultProxy) {
+    String proxy = body != null && body.has("proxy") ? Json.str(body, "proxy") : defaultProxy;
     SessionOptions o = new SessionOptions()
         .emulation(SessionOptions.Emulation.parse(Json.str(body, "browser")))
         .userAgent(Json.str(body, "userAgent"))
         .acceptLanguage(Json.str(body, "acceptLanguage"))
         .timezone(Json.str(body, "timezone"))
-        .proxy(Json.str(body, "proxy"));
+        .proxy(proxy);
     Boolean javascript = Json.bool(body, "javascript");
     if (javascript != null) {
       o.javaScript(javascript);

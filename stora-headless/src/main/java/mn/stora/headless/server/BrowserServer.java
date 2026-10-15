@@ -91,7 +91,8 @@ public final class BrowserServer implements AutoCloseable {
     server.start();
     reaper.scheduleAtFixedRate(this::closeIdleSessions, 10, 10, TimeUnit.SECONDS);
     LOG.info(() -> "stora-headless " + Version.VERSION + " listening on http://" + config.host + ":" + port()
-        + " (max sessions " + config.maxSessions + (config.token == null ? ", no token" : ", token required") + ")");
+        + " (max sessions " + config.maxSessions + (config.token == null ? ", no token" : ", token required")
+        + (config.defaultProxy == null ? "" : ", default proxy set") + ")");
     return this;
   }
 
@@ -145,7 +146,7 @@ public final class BrowserServer implements AutoCloseable {
       long mb = 1024 * 1024;
       return send(ex, 200, Json.obj("ok", true, "version", Version.VERSION, "engine", Version.ENGINE,
           "sessions", sessions.size(), "maxSessions", config.maxSessions,
-          "freeSlots", slots.availablePermits(),
+          "freeSlots", slots.availablePermits(), "defaultProxy", config.defaultProxy != null,
           "heapUsedMb", (rt.totalMemory() - rt.freeMemory()) / mb, "heapMaxMb", rt.maxMemory() / mb));
     }
     if (method.equals("GET") && (path.equals("/") || path.equals("/tester") || path.equals("/tester/"))) {
@@ -302,7 +303,7 @@ public final class BrowserServer implements AutoCloseable {
       throw new BrowserException(BrowserException.Kind.BAD_REQUEST, "url is required");
     }
     acquireSlot();
-    try (BrowserSession session = new BrowserSession(Requests.sessionOptions(body))) {
+    try (BrowserSession session = new BrowserSession(Requests.sessionOptions(body, config.defaultProxy))) {
       session.setCookies(Json.array(body, "cookies"));
       return Requests.run(session, body, null);
     } finally {
@@ -314,7 +315,7 @@ public final class BrowserServer implements AutoCloseable {
     acquireSlot();
     BrowserSession session;
     try {
-      session = new BrowserSession(Requests.sessionOptions(body));
+      session = new BrowserSession(Requests.sessionOptions(body, config.defaultProxy));
     } catch (RuntimeException e) {
       slots.release();
       throw e;

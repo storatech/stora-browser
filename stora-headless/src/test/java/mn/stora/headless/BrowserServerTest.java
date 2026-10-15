@@ -253,6 +253,32 @@ class BrowserServerTest {
   }
 
   @Test
+  void defaultProxyAppliesUnlessSessionOptsOut() throws Exception {
+    ServerConfig config = new ServerConfig();
+    config.port = 0;
+    config.defaultProxy = proxy.url("scraper", "s3cret");
+    try (BrowserServer withProxy = new BrowserServer(config).start()) {
+      String base = "http://127.0.0.1:" + withProxy.port();
+      JsonObject health = Json.parse(HTTP.send(HttpRequest.newBuilder(URI.create(base + "/health")).build(),
+          HttpResponse.BodyHandlers.ofString()).body());
+      assertTrue(health.get("defaultProxy").getAsBoolean());
+      assertFalse(health.toString().contains("s3cret"));
+
+      String viaDefault = HTTP.send(HttpRequest.newBuilder(URI.create(base + "/render"))
+          .POST(HttpRequest.BodyPublishers.ofString(Json.GSON.toJson(Json.obj("url", site.url("/headers"),
+              "return", Json.GSON.toJsonTree(java.util.List.of("text")))))).build(),
+          HttpResponse.BodyHandlers.ofString()).body();
+      assertTrue(viaDefault.contains("x-test-proxy: yes"), viaDefault);
+
+      String optedOut = HTTP.send(HttpRequest.newBuilder(URI.create(base + "/render"))
+          .POST(HttpRequest.BodyPublishers.ofString(Json.GSON.toJson(Json.obj("url", site.url("/headers"), "proxy", "",
+              "return", Json.GSON.toJsonTree(java.util.List.of("text")))))).build(),
+          HttpResponse.BodyHandlers.ofString()).body();
+      assertFalse(optedOut.contains("x-test-proxy"), optedOut);
+    }
+  }
+
+  @Test
   void limitsConcurrentSessions() throws Exception {
     String a = call("POST", "/sessions", new JsonObject()).json.get("id").getAsString();
     String b = call("POST", "/sessions", new JsonObject()).json.get("id").getAsString();

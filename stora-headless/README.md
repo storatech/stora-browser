@@ -159,6 +159,8 @@ const proxy = `http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${
 
 Credentials are never logged by the server, and `ProxySpec.toString()` hides them.
 
+**Default proxy.** Start the server with `--proxy URL` or `STORA_HEADLESS_PROXY=URL` to route every session that doesn't send its own `proxy` through it. Send `"proxy": ""` to opt a session out. `/health` reports `"defaultProxy": true` but never the value. This also lets the tester page use a proxy without typing credentials into it.
+
 ## Example: Amazon product and search
 
 Amazon puts product titles and prices in the server HTML, so the fastest way is to load only the document and run the extraction script on it (see [Speed](#speed-choosing-what-to-load) and [benchmark.md](benchmark.md)).
@@ -186,6 +188,12 @@ curl -s localhost:8090/render -H "$H" -d '{
 ```
 
 To click through from search results to a product, open a session and use `/click` with `"selector": "div[data-component-type=s-search-result] h2 a"` and a `then` script, as in the Coupang example below.
+
+What we saw on Amazon on 2026-10-16:
+- **Product and search pages** load normally; see [benchmark.md](benchmark.md).
+- **Home page:** `https://www.amazon.com/` answers this engine with an AWS WAF check (HTTP 202, empty body, `x-amzn-waf-action` header), directly and through proxies. Start from a search or product URL instead.
+- **Delivery location:** it follows the proxy's location; e.g. "Delivering to Buffalo 14202" through a Buffalo proxy. Changing the ZIP through Amazon's "Deliver to" dialog does not work in this engine: the dialog's ZIP form never appears, and the address-change endpoint returns an empty 200. To get another delivery location, use a proxy located there.
+- **Bot check after clicks:** after many automated page loads, following a search-result link can land on Amazon's "Click the button below to continue shopping" page. stora-headless does not click through bot checks; slow down or rotate proxies.
 
 ## Example: Coupang product
 
@@ -435,11 +443,11 @@ A session is not meant for parallel use: its methods are synchronized and run on
 ```bash
 java -jar stora-headless-all.jar render https://example.com/ --script 'document.title' --text
 java -jar stora-headless-all.jar render https://www.coupang.com/ --proxy "$PROXY" --wait-for 'a[href*="/vp/products/"]'
-java -jar stora-headless-all.jar serve --port 8090 --max-sessions 8 --session-ttl 300 --token "$TOKEN"
+java -jar stora-headless-all.jar serve --port 8090 --max-sessions 8 --session-ttl 300 --token "$TOKEN" --proxy "$PROXY"
 java -jar stora-headless-all.jar --version
 ```
 
-`serve` also reads `HOST`, `PORT`, `STORA_HEADLESS_TOKEN`, `MAX_SESSIONS` and `SESSION_TTL_SECONDS` from the environment.
+`serve` also reads `HOST`, `PORT`, `STORA_HEADLESS_TOKEN`, `STORA_HEADLESS_PROXY`, `MAX_SESSIONS` and `SESSION_TTL_SECONDS` from the environment.
 
 ## What the JavaScript engine supports
 
@@ -484,7 +492,7 @@ Keep `HOST` at `127.0.0.1` when the scrapers run on the same host. Otherwise bin
 ## Development
 
 ```bash
-mvn test          # 33 tests: local test site and test proxy, no internet needed
+mvn test          # 34 tests: local test site and test proxy, no internet needed
 mvn package       # + target/stora-headless-0.1.0-SNAPSHOT-all.jar
 ```
 

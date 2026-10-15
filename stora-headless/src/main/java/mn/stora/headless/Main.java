@@ -78,6 +78,9 @@ public final class Main {
         case "--session-ttl":
           config.sessionTtlSeconds = Integer.parseInt(value(a, ++i, flag));
           break;
+        case "--proxy":
+          config.defaultProxy = value(a, ++i, flag);
+          break;
         default:
           throw new IllegalArgumentException("Unknown flag " + flag);
       }
@@ -199,11 +202,12 @@ public final class Main {
     out.println();
     out.println("Usage:");
     out.println("  serve  [--host 127.0.0.1] [--port 8090] [--token T] [--max-sessions 8] [--session-ttl 300]");
+    out.println("         [--proxy http://user:pass@host:port]   default proxy for sessions without their own");
     out.println("  render URL [--proxy http://user:pass@host:port] [--script JS] [--wait-for CSS]");
     out.println("             [--js-wait MS] [--browser chrome|edge|firefox] [--user-agent UA]");
     out.println("             [--block image|font|stylesheet|media|script] [--text] [--no-js]");
     out.println("  --version");
     out.println();
-    out.println("Environment for serve: HOST, PORT, STORA_HEADLESS_TOKEN, MAX_SESSIONS, SESSION_TTL_SECONDS");
+    out.println("Environment for serve: HOST, PORT, STORA_HEADLESS_TOKEN, STORA_HEADLESS_PROXY, MAX_SESSIONS, SESSION_TTL_SECONDS");
   }
 }
