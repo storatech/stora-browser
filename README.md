@@ -1,3 +1,12 @@
+# stora-browser
+
+This repository has two parts:
+
+- **[`stora-headless/`](stora-headless/README.md)**: Stora's lightweight pure-Java headless browser for scraping, with an HTTP API. Open a link, run JavaScript in the page, click and navigate, read the result; per-session proxies. Start here for new scrapers.
+- **The rest of the repository**: a fork of jBrowserDriver (below), used by `stora-skynet` as its `skynet-browser` submodule. Unchanged.
+
+- - -
+
 # jBrowserDriver
 A programmable, embeddable web browser driver compatible with the Selenium WebDriver spec -- headless, WebKit-based, pure Java
 

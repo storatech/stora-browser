@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stora-headless tester</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%223%22 fill=%22%232563eb%22/%3E%3Cpath d=%22M4 5h8M4 8h8M4 11h5%22 stroke=%22white%22 stroke-width=%221.5%22/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #d9dde3; --text: #1d232b; --muted: #66707c;
+    --accent: #2563eb; --accent-text: #ffffff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+    --code-bg: #f1f3f6; --frame-bg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151a; --panel: #1a1e25; --border: #2c323c; --text: #e6e9ee; --muted: #9aa3ae;
+      --accent: #3b82f6; --accent-text: #ffffff; --ok: #4ade80; --warn: #fbbf24; --err: #f87171;
+      --code-bg: #11141a; --frame-bg: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  input, select, textarea { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  label { color: var(--muted); font-size: 12px; display: block; margin: 8px 0 3px; }
+  .bar { display: flex; gap: 6px; align-items: center; padding: 8px 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .bar .url { flex: 1; }
+  .status { display: flex; gap: 14px; align-items: center; padding: 5px 12px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); background: var(--panel); overflow-x: auto; white-space: nowrap; min-height: 28px; }
+  .status b { color: var(--text); font-weight: 600; }
+  .badge { border-radius: 10px; padding: 1px 8px; font-weight: 600; color: #fff; background: var(--muted); }
+  .badge.ok { background: var(--ok); } .badge.warn { background: var(--warn); } .badge.err { background: var(--err); }
+  .main { flex: 1; display: flex; min-height: 0; }
+  .view { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .tabs { display: flex; gap: 2px; padding: 6px 10px 0; background: var(--bg); }
+  .tabs button { border-bottom: none; border-radius: 6px 6px 0 0; background: var(--bg); }
+  .tabs button.active { background: var(--panel); border-color: var(--border); font-weight: 600; }
+  .pane { flex: 1; display: none; min-height: 0; background: var(--panel); border-top: 1px solid var(--border); }
+  .pane.active { display: block; }
+  iframe { width: 100%; height: 100%; border: 0; background: var(--frame-bg); display: block; }
+  pre { margin: 0; padding: 10px 12px; overflow: auto; height: 100%; background: var(--code-bg); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+  .side { width: 380px; border-left: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .side section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .side h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .row { display: flex; gap: 6px; align-items: center; }
+  .row > input, .row > select { flex: 1; }
+  textarea { width: 100%; resize: vertical; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .check { display: inline-flex; cursor: pointer; margin-top: 0; gap: 4px; align-items: center; color: var(--muted); font-size: 12px; margin-right: 10px; }
+  .output { flex: 1; min-height: 120px; display: flex; flex-direction: column; }
+  .output pre { flex: 1; border-top: 1px solid var(--border); }
+  .log-entry { border-bottom: 1px solid var(--border); padding: 6px 0; }
+  .log-entry .cmd { color: var(--muted); cursor: pointer; }
+  .log-entry .cmd:hover { color: var(--accent); }
+  .log-entry.error .res { color: var(--err); }
+  .options { display: none; padding: 10px 12px 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .options.open { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 14px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; padding: 20px; }
+  .spinner { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; display: inline-block; animation: spin .8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 860px) {
+    .main { flex-direction: column; }
+    .side { width: auto; border-left: 0; border-top: 1px solid var(--border); max-height: 45vh; }
+    .bar { flex-wrap: wrap; }
+    .bar .url { flex-basis: 100%; order: 10; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <button id="back" title="Back" disabled>&larr;</button>
+    <button id="forward" title="Forward" disabled>&rarr;</button>
+    <button id="reload" title="Reload" disabled>&#x21bb;</button>
+    <input id="url" class="url" type="url" placeholder="https://www.amazon.com/s?k=coffee+beans" autocomplete="off" spellcheck="false">
+    <button id="go" class="primary">Go</button>
+    <button id="toggleOptions" title="Session options">Options</button>
+    <button id="closeSession" title="Close the headless session" disabled>Close session</button>
+  </div>
+
+  <div class="options" id="options">
+    <div>
+      <label for="token">Server token</label>
+      <input id="token" type="password" placeholder="STORA_HEADLESS_TOKEN (kept in this browser)">
+    </div>
+    <div>
+      <label for="proxy">Proxy</label>
+      <input id="proxy" type="text" placeholder="http://USER:PASS@HOST:PORT" spellcheck="false">
+    </div>
+    <div>
+      <label for="mode">Mode</label>
+      <select id="mode">
+        <option value="full">Full: run page scripts</option>
+        <option value="lean">Lean: scripts, no assets or ads</option>
+        <option value="html">HTML only: fastest</option>
+        <option value="nojs">No JavaScript at all</option>
+      </select>
+    </div>
+    <div>
+      <label for="browser">Emulated browser</label>
+      <select id="browser">
+        <option value="chrome">Chrome</option>
+        <option value="edge">Edge</option>
+        <option value="firefox">Firefox</option>
+        <option value="firefox_esr">Firefox ESR</option>
+      </select>
+    </div>
+    <div>
+      <label for="jsWaitMs">Run page timers after load (ms)</label>
+      <input id="jsWaitMs" type="number" min="0" step="250" value="1000">
+    </div>
+    <div>
+      <label for="waitForSelector">Wait for selector after load</label>
+      <input id="waitForSelector" type="text" placeholder="#productTitle" spellcheck="false">
+    </div>
+    <div>
+      <label for="acceptLanguage">Accept-Language</label>
+      <input id="acceptLanguage" type="text" placeholder="en-US,en;q=0.9" spellcheck="false">
+    </div>
+    <div>
+      <label for="userAgent">User agent</label>
+      <input id="userAgent" type="text" placeholder="emulated browser's" spellcheck="false">
+    </div>
+    <div style="grid-column: 1 / -1">
+      <p class="hint">Options apply when a session opens. Changing them closes the current session; the next Go opens a new one. The token is stored in this browser's localStorage only.</p>
+    </div>
+  </div>
+
+  <div class="status" id="status"><span>Enter a URL and press Go. Pages load in a headless session on the server, and the HTML it produced is shown below.</span></div>
+
+  <div class="main">
+    <div class="view">
+      <div class="tabs" role="tablist">
+        <button class="active" data-pane="page" role="tab">Page</button>
+        <button data-pane="html" role="tab">HTML</button>
+        <button data-pane="text" role="tab">Text</button>
+      </div>
+      <div class="pane active" id="pane-page">
+        <div class="empty" id="emptyPage">No page loaded yet.<br>Links you click in the page load through the headless browser.</div>
+        <iframe id="frame" title="Rendered page" sandbox="allow-same-origin" style="display:none"></iframe>
+      </div>
+      <div class="pane" id="pane-html"><pre id="htmlSource"></pre></div>
+      <div class="pane" id="pane-text"><pre id="textView"></pre></div>
+    </div>
+
+    <aside class="side">
+      <section>
+        <h3>Run JavaScript in the session</h3>
+        <textarea id="script" rows="5" spellcheck="false" placeholder="document.title&#10;&#10;Ctrl/Cmd+Enter runs. The value comes back as JSON; Promises are awaited."></textarea>
+        <div style="margin-top:6px">
+          <label class="check"><input type="checkbox" id="scriptNavigates"> waits for navigation</label>
+          <label class="check"><input type="checkbox" id="scriptRefresh" checked> refresh view</label>
+        </div>
+        <div class="row" style="margin-top:6px"><button id="run" class="primary" disabled>Run</button></div>
+      </section>
+      <section>
+        <h3>Click / wait</h3>
+        <div class="row">
+          <input id="clickSelector" type="text" placeholder="a.product-link" spellcheck="false">
+          <button id="click" disabled>Click</button>
+        </div>
+        <div style="margin-top:6px"><label class="check"><input type="checkbox" id="clickNavigates" checked> waits for navigation</label></div>
+        <div class="row" style="margin-top:6px">
+          <input id="waitSelector" type="text" placeholder=".price" spellcheck="false">
+          <button id="wait" disabled>Wait for</button>
+        </div>
+      </section>
+      <div class="output">
+        <section style="border-bottom:0; padding-bottom:4px"><h3>Results</h3></section>
+        <pre id="log"></pre>
+      </div>
+    </aside>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var STORE = 'stora-headless-tester';
+  var FIELDS = ['token', 'proxy', 'mode', 'browser', 'jsWaitMs', 'waitForSelector', 'acceptLanguage', 'userAgent'];
+  var MODES = {
+    full: {},
+    lean: { blockTypes: ['image', 'font', 'media', 'stylesheet'], blockUrls: ['*amazon-adsystem*', '*doubleclick*', '*google-analytics*', '*googletagmanager*'] },
+    html: { blockTypes: ['script', 'stylesheet', 'image', 'font', 'media'], jsWaitMs: 0 },
+    nojs: { javascript: false }
+  };
+
+  var state = { session: null, history: [], index: -1, current: null, busy: false };
+
+  // ---- settings -----------------------------------------------------------
+  function loadSettings() {
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORE) || '{}');
+      FIELDS.forEach(function (f) { if (saved[f] !== undefined) $(f).value = saved[f]; });
+      if (saved.lastUrl) $('url').value = saved.lastUrl;
+    } catch (e) { /* storage unavailable */ }
+  }
+  function saveSettings() {
+    try {
+      var data = { lastUrl: $('url').value };
+      FIELDS.forEach(function (f) { data[f] = $(f).value; });
+      localStorage.setItem(STORE, JSON.stringify(data));
+    } catch (e) { /* storage unavailable */ }
+  }
+
+  function sessionOptions() {
+    var o = { browser: $('browser').value };
+    if ($('proxy').value.trim()) o.proxy = $('proxy').value.trim();
+    if ($('acceptLanguage').value.trim()) o.acceptLanguage = $('acceptLanguage').value.trim();
+    if ($('userAgent').value.trim()) o.userAgent = $('userAgent').value.trim();
+    var mode = MODES[$('mode').value] || {};
+    Object.keys(mode).forEach(function (k) { if (k !== 'jsWaitMs') o[k] = mode[k]; });
+    return o;
+  }
+  function pageOptions() {
+    var mode = MODES[$('mode').value] || {};
+    var o = { jsWaitMs: mode.jsWaitMs !== undefined ? mode.jsWaitMs : Number($('jsWaitMs').value || 0) };
+    if ($('waitForSelector').value.trim()) {
+      o.waitForSelector = $('waitForSelector').value.trim();
+      o.failOnWaitTimeout = false;
+    }
+    return o;
+  }
+
+  // ---- API ----------------------------------------------------------------
+  function api(method, path, body) {
+    var headers = { 'Content-Type': 'application/json' };
+    if ($('token').value) headers.Authorization = 'Bearer ' + $('token').value;
+    return fetch(path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (json) {
+          if (!res.ok || json.ok === false) {
+            var err = new Error(json.error || ('HTTP ' + res.status));
+            err.kind = json.kind || ('HTTP ' + res.status);
+            err.status = res.status;
+            throw err;
+          }
+          return json;
+        });
+      });
+  }
+
+  // ---- UI state -----------------------------------------------------------
+  var timer = null;
+  function setBusy(busy, label) {
+    state.busy = busy;
+    ['go', 'reload', 'run', 'click', 'wait', 'back', 'forward', 'closeSession'].forEach(function (id) { $(id).disabled = busy; });
+    if (busy) {
+      var started = Date.now();
+      var tick = function () {
+        $('status').innerHTML = '<span class="spinner"></span> <span>' + esc(label) + ' &middot; ' + ((Date.now() - started) / 1000).toFixed(1) + ' s</span>';
+      };
+      tick();
+      timer = setInterval(tick, 100);
+    } else {
+      clearInterval(timer);
+      updateButtons();
+    }
+  }
+  function updateButtons() {
+    var has = !!state.session;
+    $('reload').disabled = !state.current;
+    $('back').disabled = state.index <= 0;
+    $('forward').disabled = state.index >= state.history.length - 1;
+    $('run').disabled = !has;
+    $('click').disabled = !has;
+    $('wait').disabled = !has;
+    $('closeSession').disabled = !has;
+  }
+
+  function esc(s) {
+    return String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function kb(bytes) { return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + ' MB' : Math.round(bytes / 1024) + ' KB'; }
+
+  var last = {};
+  function showStatus(r) {
+    last = r;
+    var cls = r.status >= 200 && r.status < 300 ? 'ok' : (r.status >= 300 && r.status < 400 ? 'warn' : 'err');
+    var parts = ['<span class="badge ' + cls + '">' + esc(r.status) + '</span>'];
+    if (r.title) parts.push('<b>' + esc(r.title) + '</b>');
+    parts.push('<span>' + esc(r.url) + '</span>');
+    if (r.timingMs !== undefined) parts.push('<span>' + (r.timingMs / 1000).toFixed(1) + ' s</span>');
+    if (r.stats) parts.push('<span>' + r.stats.requests + ' requests' + (r.stats.blocked ? ' (' + r.stats.blocked + ' blocked)' : '') + ', ' + kb(r.stats.bytes) + '</span>');
+    if (r.waitTimedOut) parts.push('<span class="badge warn">wait timed out</span>');
+    if (state.session) parts.push('<span>session ' + esc(state.session.slice(0, 8)) + '</span>');
+    $('status').innerHTML = parts.join('');
+  }
+  function showError(e) {
+    $('status').innerHTML = '<span class="badge err">' + esc(e.kind || 'ERROR') + '</span><span>' + esc(e.message) + '</span>';
+    log('error', e.kind + ': ' + e.message);
+  }
+
+  function log(type, text, cmd) {
+    var out = $('log');
+    var entry = document.createElement('div');
+    entry.className = 'log-entry' + (type === 'error' ? ' error' : '');
+    if (cmd) {
+      var c = document.createElement('div');
+      c.className = 'cmd';
+      c.title = 'Click to put back in the editor';
+      c.textContent = '> ' + cmd;
+      c.addEventListener('click', function () { $('script').value = cmd; $('script').focus(); });
+      entry.appendChild(c);
+    }
+    var r = document.createElement('div');
+    r.className = 'res';
+    r.textContent = text;
+    entry.appendChild(r);
+    out.insertBefore(entry, out.firstChild);
+  }
+
+  // ---- rendering ----------------------------------------------------------
+  function render(html, url) {
+    state.current = url;
+    var page = html || '';
+    // Resolve relative links, images and CSS against the scraped page; drop meta refresh redirects.
+    page = page.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, '');
+    var base = '<base href="' + esc(url) + '">';
+    if (/<head[^>]*>/i.test(page)) {
+      page = page.replace(/<head[^>]*>/i, function (m) { return m + base; });
+    } else {
+      page = base + page;
+    }
+    $('emptyPage').style.display = 'none';
+    var frame = $('frame');
+    frame.style.display = 'block';
+    frame.onload = function () { hookFrame(frame); };
+    frame.srcdoc = page;
+    $('htmlSource').textContent = html || '';
+    $('textView').textContent = '';
+    textLoaded = false;
+    if (activePane === 'text') loadText();
+  }
+
+  // Scripts never run inside the preview (sandbox without allow-scripts). Clicks on links are sent
+  // to the headless session instead, so navigation happens there, like in a browser.
+  function hookFrame(frame) {
+    var doc;
+    try { doc = frame.contentDocument; } catch (e) { return; }
+    if (!doc) return;
+    doc.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (!a) return;
+      e.preventDefault();
+      var href = a.href;
+      if (!/^https?:/i.test(href)) {
+        log('info', 'Not followed: ' + href);
+        return;
+      }
+      navigate(href, { referer: state.current });
+    }, true);
+    doc.addEventListener('submit', function (e) {
+      e.preventDefault();
+      log('info', 'Forms are not submitted from the preview. Use the console, e.g. document.querySelector("form").submit() with "waits for navigation".');
+    }, true);
+  }
+
+  var activePane = 'page';
+  var textLoaded = false;
+  function loadText() {
+    if (textLoaded || !state.session) return;
+    textLoaded = true;
+    api('GET', '/sessions/' + state.session + '/text').then(function (r) {
+      $('textView').textContent = r.text;
+    }).catch(showError);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+    b.addEventListener('click', function () {
+      activePane = b.getAttribute('data-pane');
+      Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (x) { x.classList.toggle('active', x === b); });
+      Array.prototype.forEach.call(document.querySelectorAll('.pane'), function (p) { p.classList.toggle('active', p.id === 'pane-' + activePane); });
+      if (activePane === 'text') loadText();
+    });
+  });
+
+  // ---- navigation ---------------------------------------------------------
+  function normalize(url) {
+    url = url.trim();
+    if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+    return url;
+  }
+
+  function navigate(url, opts) {
+    opts = opts || {};
+    url = normalize(url);
+    if (!url || state.busy) return Promise.resolve();
+    $('url').value = url;
+    saveSettings();
+    setBusy(true, 'Loading ' + url);
+    var request;
+    if (!state.session) {
+      var body = Object.assign({ url: url, return: ['html'] }, sessionOptions(), pageOptions());
+      request = api('POST', '/sessions', body).then(function (r) { state.session = r.id; return r; });
+    } else {
+      var go = Object.assign({ url: url, return: ['html'] }, pageOptions());
+      if (opts.referer) go.headers = { Referer: opts.referer };
+      request = api('POST', '/sessions/' + state.session + '/goto', go);
+    }
+    return request.then(function (r) {
+      if (!opts.fromHistory) pushHistory(r.url);
+      $('url').value = r.url;
+      render(r.html, r.url);
+      setBusy(false);
+      showStatus(r);
+    }).catch(function (e) {
+      setBusy(false);
+      if (e.status === 404 && state.session) {
+        // The session expired on the server; open a new one and retry once.
+        state.session = null;
+        if (!opts.retried) return navigate(url, Object.assign({}, opts, { retried: true }));
+      }
+      showError(e);
+    });
+  }
+
+  function pushHistory(url) {
+    state.history = state.history.slice(0, state.index + 1);
+    if (state.history[state.history.length - 1] !== url) state.history.push(url);
+    state.index = state.history.length - 1;
+  }
+
+  function refreshView(r) {
+    return api('GET', '/sessions/' + state.session + '/content').then(function (c) {
+      render(c.html, c.url);
+      if (r && r.url && r.url !== state.history[state.index]) pushHistory(r.url);
+      $('url').value = c.url;
+      return c;
+    });
+  }
+
+  // ---- actions ------------------------------------------------------------
+  function runScript() {
+    var script = $('script').value.trim();
+    if (!script || !state.session || state.busy) return;
+    var navigates = $('scriptNavigates').checked;
+    setBusy(true, navigates ? 'Running script and waiting for navigation' : 'Running script');
+    var body = { script: script };
+    if (navigates) {
+      body.waitForNavigation = true;
+      body.jsWaitMs = pageOptions().jsWaitMs;
+      body.return = ['html'];
+    }
+    api('POST', '/sessions/' + state.session + '/evaluate', body).then(function (r) {
+      log('result', navigates ? 'navigated to ' + r.url + ' (' + r.status + ')' : JSON.stringify(r.result, null, 2), script);
+      if (navigates) {
+        pushHistory(r.url);
+        $('url').value = r.url;
+        render(r.html, r.url);
+        setBusy(false);
+        showStatus(r);
+      } else if ($('scriptRefresh').checked) {
+        return refreshView(r).then(function () { setBusy(false); showStatus(Object.assign({}, last, { url: r.url })); });
+      } else {
+        setBusy(false);
+        showStatus(Object.assign({}, last, { url: r.url }));
+      }
+    }).catch(function (e) { setBusy(false); showError(e); log('error', e.message, script); });
+  }
+
+
+  function clickSelector() {
+    var selector = $('clickSelector').value.trim();
+    if (!selector || !state.session || state.busy) return;
+    var navigates = $('clickNavigates').checked;
+    setBusy(true, 'Clicking ' + selector);
+    var body = { selector: selector, waitForNavigation: navigates, jsWaitMs: pageOptions().jsWaitMs, return: ['html'] };
+    api('POST', '/sessions/' + state.session + '/click', body).then(function (r) {
+      log('result', 'clicked ' + selector + (r.navigated ? ' -> ' + r.url + ' (' + r.status + ')' : ''));
+      if (r.navigated) pushHistory(r.url);
+      $('url').value = r.url;
+      render(r.html, r.url);
+      setBusy(false);
+      showStatus(r);
+    }).catch(function (e) { setBusy(false); showError(e); });
+  }
+
+  function waitFor() {
+    var selector = $('waitSelector').value.trim();
+    if (!selector || !state.session || state.busy) return;
+    setBusy(true, 'Waiting for ' + selector);
+    api('POST', '/sessions/' + state.session + '/wait', { waitForSelector: selector, waitTimeoutMs: 15000 }).then(function (r) {
+      log('result', 'found ' + selector);
+      return refreshView(r).then(function () { setBusy(false); showStatus(Object.assign({}, last, { url: r.url })); });
+    }).catch(function (e) { setBusy(false); showError(e); });
+  }
+
+  function closeSession() {
+    if (!state.session) return Promise.resolve();
+    var id = state.session;
+    state.session = null;
+    updateButtons();
+    return api('DELETE', '/sessions/' + id).catch(function () { /* already gone */ }).then(function () {
+      log('info', 'Session ' + id.slice(0, 8) + ' closed');
+    });
+  }
+
+
+  // ---- wiring -------------------------------------------------------------
+  $('go').addEventListener('click', function () { navigate($('url').value); });
+  $('url').addEventListener('keydown', function (e) { if (e.key === 'Enter') navigate($('url').value); });
+  $('reload').addEventListener('click', function () { if (state.current) navigate(state.current, { fromHistory: true }); });
+  $('back').addEventListener('click', function () {
+    if (state.index > 0) { state.index--; navigate(state.history[state.index], { fromHistory: true }); }
+  });
+  $('forward').addEventListener('click', function () {
+    if (state.index < state.history.length - 1) { state.index++; navigate(state.history[state.index], { fromHistory: true }); }
+  });
+  $('toggleOptions').addEventListener('click', function () { $('options').classList.toggle('open'); });
+  $('closeSession').addEventListener('click', closeSession);
+  $('run').addEventListener('click', runScript);
+  $('script').addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); runScript(); } });
+  $('click').addEventListener('click', clickSelector);
+  $('clickSelector').addEventListener('keydown', function (e) { if (e.key === 'Enter') clickSelector(); });
+  $('wait').addEventListener('click', waitFor);
+  $('waitSelector').addEventListener('keydown', function (e) { if (e.key === 'Enter') waitFor(); });
+  FIELDS.forEach(function (f) {
+    $(f).addEventListener('change', function () {
+      saveSettings();
+      if (f !== 'token' && f !== 'jsWaitMs' && f !== 'waitForSelector' && state.session) {
+        closeSession().then(function () { log('info', 'Options changed; the next Go opens a new session.'); });
+      }
+    });
+  });
+  window.addEventListener('pagehide', function () {
+    if (!state.session) return;
+    var headers = {};
+    if ($('token').value) headers.Authorization = 'Bearer ' + $('token').value;
+    try { fetch('/sessions/' + state.session, { method: 'DELETE', headers: headers, keepalive: true }); } catch (e) { /* ignore */ }
+  });
+
+  loadSettings();
+  api('GET', '/health').then(function (h) {
+    $('status').innerHTML = '<span class="badge ok">ready</span><span>stora-headless ' + esc(h.version) + ' &middot; ' + esc(h.engine)
+      + ' &middot; ' + h.freeSlots + '/' + h.maxSessions + ' slots free &middot; heap ' + h.heapUsedMb + '/' + h.heapMaxMb + ' MB</span>';
+    // Ask for the token only if this server needs one.
+    return api('GET', '/sessions').catch(function (e) {
+      if (e.status === 401) {
+        $('options').classList.add('open');
+        $('token').focus();
+        log('info', $('token').value ? 'The saved token was rejected; enter the server token in Options.' : 'This server needs a token; enter it in Options.');
+      }
+    });
+  }).catch(showError);
+  updateButtons();
+})();
+</script>
+</body>
+</html>
